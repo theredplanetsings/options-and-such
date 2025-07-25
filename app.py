@@ -6,11 +6,39 @@ import plotly.express as px
 from scipy.stats import norm
 from scipy.optimize import brentq
 from datetime import datetime, timedelta
+import yfinance as yf
 
 __author__ = "https://github.com/theredplanetsings"
 __date__ = "20/6/2025"
 
 st.set_page_config(page_title="Options & Volatility Dashboard", layout="wide")
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_stock_data(symbol):
+    """Fetch current stock price and basic info using yfinance"""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="1d")
+        
+        if hist.empty:
+            return None, None, None
+        
+        current_price = hist['Close'].iloc[-1]
+        company_name = info.get('longName', symbol)
+        
+        # Try to get some basic volatility estimate from recent data
+        hist_30d = ticker.history(period="30d")
+        if len(hist_30d) > 1:
+            returns = np.log(hist_30d['Close'] / hist_30d['Close'].shift(1)).dropna()
+            historical_vol = returns.std() * np.sqrt(252)  # Annualized volatility
+        else:
+            historical_vol = None
+            
+        return current_price, company_name, historical_vol
+    except Exception as e:
+        st.error(f"Error fetching data for {symbol}: {str(e)}")
+        return None, None, None
 
 def black_scholes_call(S, K, T, r, sigma):
     """Calculate Black-Scholes call option price"""
@@ -80,18 +108,43 @@ def black_scholes_calculator():
         
         if use_stock_symbol:
             stock_symbol = st.text_input("Stock Symbol (e.g., AAPL, MSFT, SPY)", value="AAPL", key="bs_symbol").upper()
-            st.info(f"Using symbol: {stock_symbol} (manual price entry required)")
-            price_label = f"Current {stock_symbol} Price ($)"
+            
+            if stock_symbol:
+                with st.spinner(f"Fetching data for {stock_symbol}..."):
+                    current_price, company_name, hist_vol = get_stock_data(stock_symbol)
+                
+                if current_price is not None:
+                    st.success(f"✓ {company_name} ({stock_symbol})")
+                    st.info(f"Current Price: ${current_price:.2f}")
+                    if hist_vol is not None:
+                        st.info(f"30-day Historical Volatility: {hist_vol*100:.1f}%")
+                    
+                    price_label = f"{stock_symbol} Price"
+                    default_price = float(current_price)
+                    default_vol = float(hist_vol) if hist_vol is not None else 0.20
+                else:
+                    st.error(f"Could not fetch data for {stock_symbol}")
+                    price_label = f"{stock_symbol} Price ($)"
+                    default_price = 100.0
+                    default_vol = 0.20
+                    stock_symbol = None
+            else:
+                price_label = "Stock Price ($)"
+                default_price = 100.0
+                default_vol = 0.20
+                stock_symbol = None
         else:
             stock_symbol = None
             price_label = "Current Stock Price ($)"
+            default_price = 100.0
+            default_vol = 0.20
         
         st.markdown("**Option Parameters**")
-        S = st.number_input(price_label, value=100.0, min_value=0.01)
-        K = st.number_input("Strike Price ($)", value=100.0, min_value=0.01)
+        S = st.number_input(price_label, value=default_price, min_value=0.01)
+        K = st.number_input("Strike Price ($)", value=default_price, min_value=0.01)
         T = st.number_input("Time to Expiration (years)", value=0.25, min_value=0.001)
         r = st.number_input("Risk-free Rate (%)", value=5.0, min_value=0.0) / 100
-        sigma = st.number_input("Volatility (%)", value=20.0, min_value=0.1) / 100
+        sigma = st.number_input("Volatility (%)", value=default_vol*100, min_value=0.1) / 100
         option_type = st.radio("Option Type", ["Call", "Put"])
     
     with col2:
@@ -238,18 +291,39 @@ def implied_volatility_calculator():
         
         if use_stock_symbol_iv:
             stock_symbol_iv = st.text_input("Stock Symbol (e.g., AAPL, MSFT, SPY)", value="AAPL", key="iv_symbol").upper()
-            st.info(f"Using symbol: {stock_symbol_iv} (manual price entry required)")
-            iv_price_label = f"Current {stock_symbol_iv} Price ($)"
-            market_price_label = f"{stock_symbol_iv} Market Option Price ($)"
+            
+            if stock_symbol_iv:
+                with st.spinner(f"Fetching data for {stock_symbol_iv}..."):
+                    iv_current_price, iv_company_name, iv_hist_vol = get_stock_data(stock_symbol_iv)
+                
+                if iv_current_price is not None:
+                    st.success(f"✓ {iv_company_name} ({stock_symbol_iv})")
+                    st.info(f"Current Price: ${iv_current_price:.2f}")
+                    
+                    iv_price_label = f"{stock_symbol_iv} Price"
+                    market_price_label = f"{stock_symbol_iv} Option Price ($)"
+                    iv_default_price = float(iv_current_price)
+                else:
+                    st.error(f"Could not fetch data for {stock_symbol_iv}")
+                    iv_price_label = f"{stock_symbol_iv} Price ($)"
+                    market_price_label = f"{stock_symbol_iv} Option Price ($)"
+                    iv_default_price = 100.0
+                    stock_symbol_iv = None
+            else:
+                iv_price_label = "Stock Price ($)"
+                market_price_label = "Option Price ($)"
+                iv_default_price = 100.0
+                stock_symbol_iv = None
         else:
             stock_symbol_iv = None
             iv_price_label = "Current Stock Price ($)"
             market_price_label = "Market Option Price ($)"
+            iv_default_price = 100.0
         
         st.markdown("**Option Parameters**")
         market_price = st.number_input(market_price_label, value=5.0, min_value=0.01)
-        S = st.number_input(iv_price_label, value=100.0, min_value=0.01, key="iv_S")
-        K = st.number_input("Strike Price ($)", value=100.0, min_value=0.01, key="iv_K")
+        S = st.number_input(iv_price_label, value=iv_default_price, min_value=0.01, key="iv_S")
+        K = st.number_input("Strike Price ($)", value=iv_default_price, min_value=0.01, key="iv_K")
         T = st.number_input("Time to Expiration (years)", value=0.25, min_value=0.001, key="iv_T")
         r = st.number_input("Risk-free Rate (%)", value=5.0, min_value=0.0, key="iv_r") / 100
         option_type = st.radio("Option Type", ["Call", "Put"], key="iv_type")
@@ -287,14 +361,39 @@ def volatility_surface():
         
         if use_market_symbol:
             market_symbol = st.text_input("Stock Symbol (e.g., AAPL, MSFT, SPY)", value="AAPL", key="market_symbol").upper()
-            st.info(f"Modeling volatility surface for: {market_symbol}")
-            market_price_label = f"{market_symbol} Spot Price ($)"
+            
+            if market_symbol:
+                with st.spinner(f"Fetching data for {market_symbol}..."):
+                    market_current_price, market_company_name, market_hist_vol = get_stock_data(market_symbol)
+                
+                if market_current_price is not None:
+                    st.success(f"✓ {market_company_name} ({market_symbol})")
+                    st.info(f"Current Price: ${market_current_price:.2f}")
+                    if market_hist_vol is not None:
+                        st.info(f"30-day Historical Vol: {market_hist_vol*100:.1f}%")
+                    
+                    market_price_label = f"{market_symbol} Spot Price"
+                    market_default_price = float(market_current_price)
+                    market_default_vol = int(market_hist_vol*100) if market_hist_vol is not None else 20
+                else:
+                    st.error(f"Could not fetch data for {market_symbol}")
+                    market_price_label = f"{market_symbol} Spot Price ($)"
+                    market_default_price = 100.0
+                    market_default_vol = 20
+                    market_symbol = None
+            else:
+                market_price_label = "Spot Price ($)"
+                market_default_price = 100.0
+                market_default_vol = 20
+                market_symbol = None
         else:
             market_symbol = None
             market_price_label = "Market Spot Price ($)"
+            market_default_price = 100.0
+            market_default_vol = 20
         
         st.markdown("**Price Parameters**")
-        market_spot = st.number_input(market_price_label, value=100.0, min_value=0.01, key="market_spot")
+        market_spot = st.number_input(market_price_label, value=market_default_price, min_value=0.01, key="market_spot")
         
         # Strike range
         market_strike_min = st.number_input("Min Strike (%)", value=80, min_value=1, key="market_strike_min")
@@ -308,7 +407,7 @@ def volatility_surface():
         st.subheader("Volatility Smile Parameters")
         
         # Volatility smile parameters
-        market_base_vol = st.slider("Base Volatility (%)", 10, 50, 20, key="market_base_vol") / 100
+        market_base_vol = st.slider("Base Volatility (%)", 10, 50, market_default_vol, key="market_base_vol") / 100
         market_skew = st.slider("Volatility Skew", -0.1, 0.1, -0.02, 0.01, key="market_skew", 
                                help="Negative skew means OTM puts have higher IV than OTM calls")
         market_smile = st.slider("Volatility Smile", 0.0, 0.1, 0.02, 0.01, key="market_smile",
