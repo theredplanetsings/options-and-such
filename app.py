@@ -243,63 +243,98 @@ def implied_volatility_calculator():
             st.error("Could not calculate implied volatility. Check input parameters.")
 
 def volatility_surface():
-    st.header("📈 Volatility Surface Visualization")
+    st.header("📈 Market Implied Volatility Surface")
+    st.markdown("*Realistic volatility patterns with smile/skew effects - separate from Black-Scholes*")
     
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        st.subheader("Parameters")
-        spot_price = st.number_input("Spot Price ($)", value=100.0, min_value=0.01, key="vs_spot")
+        st.subheader("Market Parameters")
+        market_spot = st.number_input("Market Spot Price ($)", value=100.0, min_value=0.01, key="market_spot")
         
         # Strike range
-        strike_min = st.number_input("Min Strike (%)", value=80, min_value=1, key="vs_strike_min")
-        strike_max = st.number_input("Max Strike (%)", value=120, min_value=1, key="vs_strike_max")
+        market_strike_min = st.number_input("Min Strike (%)", value=80, min_value=1, key="market_strike_min")
+        market_strike_max = st.number_input("Max Strike (%)", value=120, min_value=1, key="market_strike_max")
         
         # Time range
-        days_min = st.number_input("Min Days to Expiry", value=7, min_value=1, key="vs_days_min")
-        days_max = st.number_input("Max Days to Expiry", value=365, min_value=1, key="vs_days_max")
+        market_days_min = st.number_input("Min Days to Expiry", value=7, min_value=1, key="market_days_min")
+        market_days_max = st.number_input("Max Days to Expiry", value=365, min_value=1, key="market_days_max")
+        
+        st.divider()
+        st.subheader("Volatility Smile Parameters")
         
         # Volatility smile parameters
-        base_vol = st.slider("Base Volatility (%)", 10, 50, 20, key="vs_base_vol") / 100
-        skew = st.slider("Volatility Skew", -0.1, 0.1, -0.02, 0.01, key="vs_skew")
-        smile = st.slider("Volatility Smile", 0.0, 0.1, 0.02, 0.01, key="vs_smile")
+        market_base_vol = st.slider("Base Volatility (%)", 10, 50, 20, key="market_base_vol") / 100
+        market_skew = st.slider("Volatility Skew", -0.1, 0.1, -0.02, 0.01, key="market_skew", 
+                               help="Negative skew means OTM puts have higher IV than OTM calls")
+        market_smile = st.slider("Volatility Smile", 0.0, 0.1, 0.02, 0.01, key="market_smile",
+                                help="Positive smile means both OTM puts and calls have higher IV")
+        
+        # Term structure effect
+        term_structure = st.slider("Term Structure Effect", -0.05, 0.05, 0.01, 0.005, key="market_term_structure",
+                                  help="How volatility changes with time to expiration")
     
     with col2:
-        # Generate volatility surface data
-        strikes = np.linspace(spot_price * strike_min/100, spot_price * strike_max/100, 20)
-        days = np.linspace(days_min, days_max, 15)
+        # Generate market volatility surface data
+        market_strikes = np.linspace(market_spot * market_strike_min/100, market_spot * market_strike_max/100, 25)
+        market_days = np.linspace(market_days_min, market_days_max, 20)
         
-        vol_surface = np.zeros((len(days), len(strikes)))
+        market_vol_surface = np.zeros((len(market_days), len(market_strikes)))
         
-        for i, day in enumerate(days):
-            for j, strike in enumerate(strikes):
-                moneyness = np.log(strike / spot_price)
+        for i, day in enumerate(market_days):
+            for j, strike in enumerate(market_strikes):
+                # Calculate moneyness (log-strike relative to spot)
+                moneyness = np.log(strike / market_spot)
+                
+                # Time factor for term structure
                 time_factor = np.sqrt(day / 365)
                 
-                # Simple volatility smile model
-                vol = base_vol + skew * moneyness + smile * moneyness**2
-                vol_surface[i, j] = vol
+                # Market volatility model with smile/skew
+                vol = (market_base_vol + 
+                      market_skew * moneyness + 
+                      market_smile * moneyness**2 +
+                      term_structure * time_factor)
+                
+                # Ensure volatility is positive
+                market_vol_surface[i, j] = max(vol, 0.05)  # Minimum 5% vol
         
-        # Create 3D surface plot
-        fig = go.Figure(data=[go.Surface(
-            x=strikes,
-            y=days,
-            z=vol_surface * 100,
-            colorscale='Viridis',
-            showscale=True
-        )])
+        # Create 3D surface plot for market volatility
+        market_fig = go.Figure()
         
-        fig.update_layout(
-            title='Implied Volatility Surface',
+        market_fig.add_trace(go.Surface(
+            x=market_strikes,
+            y=market_days,
+            z=market_vol_surface * 100,
+            colorscale='Plasma',
+            showscale=True,
+            name="Market Implied Volatility",
+            hovertemplate='<b>Strike:</b> $%{x:.2f}<br><b>Days:</b> %{y:.0f}<br><b>Implied Vol:</b> %{z:.2f}%<extra></extra>'
+        ))
+        
+        market_fig.update_layout(
+            title=f'Market Implied Volatility Surface<br>Spot: ${market_spot:.2f}, Base Vol: {market_base_vol*100:.1f}%',
             scene=dict(
                 xaxis_title='Strike Price ($)',
                 yaxis_title='Days to Expiration',
-                zaxis_title='Implied Volatility (%)'
+                zaxis_title='Implied Volatility (%)',
+                camera=dict(
+                    eye=dict(x=1.5, y=1.5, z=1.5)
+                )
             ),
-            height=600
+            height=600,
+            margin=dict(l=0, r=0, b=0, t=80)
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(market_fig, use_container_width=True, key="market_volatility_surface")
+        
+        # Educational info about market volatility patterns
+        st.info(
+            "📚 **Market Reality**: Unlike Black-Scholes' flat volatility assumption, real markets show:\n"
+            "- **Volatility Smile**: Higher IV for OTM options\n"
+            "- **Volatility Skew**: Different IV for puts vs calls\n"
+            "- **Term Structure**: IV varies with time to expiration\n"
+            "- **Sticky Strike**: IV tends to follow strike levels rather than moneyness"
+        )
 
 # Main app
 def main():
