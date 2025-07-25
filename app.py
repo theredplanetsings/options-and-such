@@ -67,13 +67,27 @@ def option_greeks(S, K, T, r, sigma, option_type='call'):
     return {'delta': delta, 'gamma': gamma, 'theta': theta, 'vega': vega}
 
 def black_scholes_calculator():
-    st.header("📊 Black-Scholes Option Pricing Calculator")
+    st.header("Black-Scholes Option Pricing Calculator")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Input Parameters")
-        S = st.number_input("Current Stock Price ($)", value=100.0, min_value=0.01)
+        
+        # Stock selection
+        st.markdown("**Stock Selection**")
+        use_stock_symbol = st.checkbox("Use specific stock symbol", value=False, key="bs_use_symbol")
+        
+        if use_stock_symbol:
+            stock_symbol = st.text_input("Stock Symbol (e.g., AAPL, MSFT, SPY)", value="AAPL", key="bs_symbol").upper()
+            st.info(f"Using symbol: {stock_symbol} (manual price entry required)")
+            price_label = f"Current {stock_symbol} Price ($)"
+        else:
+            stock_symbol = None
+            price_label = "Current Stock Price ($)"
+        
+        st.markdown("**Option Parameters**")
+        S = st.number_input(price_label, value=100.0, min_value=0.01)
         K = st.number_input("Strike Price ($)", value=100.0, min_value=0.01)
         T = st.number_input("Time to Expiration (years)", value=0.25, min_value=0.001)
         r = st.number_input("Risk-free Rate (%)", value=5.0, min_value=0.0) / 100
@@ -98,7 +112,7 @@ def black_scholes_calculator():
     st.divider()
     
     # Black-Scholes Surfaces
-    st.subheader("📈 Black-Scholes Model Surfaces")
+    st.subheader("Black-Scholes Model Surfaces")
     
     # Surface type selection
     surface_type = st.radio(
@@ -182,7 +196,7 @@ def black_scholes_calculator():
             ))
         
         fig.update_layout(
-            title=f'{surface_title}<br>Spot: ${S:.2f}, Vol: {sigma*100:.1f}%, Rate: {r*100:.1f}%',
+            title=f'{surface_title}{f" - {stock_symbol}" if stock_symbol else ""}<br>Spot: ${S:.2f}, Vol: {sigma*100:.1f}%, Rate: {r*100:.1f}%',
             scene=dict(
                 xaxis_title='Strike Price ($)',
                 yaxis_title='Days to Expiration',
@@ -205,20 +219,36 @@ def black_scholes_calculator():
         # Educational note about volatility surface
         if surface_type == "Volatility Surface":
             st.info(
-                "📚 **Educational Note**: In the Black-Scholes model, volatility is assumed to be constant across all strikes and expiration dates. "
+                "Educational Note: In the Black-Scholes model, volatility is assumed to be constant across all strikes and expiration dates. "
                 "This is why the volatility surface is completely flat. In reality, market-observed implied volatilities show patterns like volatility smile/skew. "
                 "Check the 'Volatility Surface' tab to see realistic implied volatility patterns."
             )
 
 def implied_volatility_calculator():
-    st.header("🔍 Implied Volatility Calculator")
+    st.header("Implied Volatility Calculator")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Input Parameters")
-        market_price = st.number_input("Market Option Price ($)", value=5.0, min_value=0.01)
-        S = st.number_input("Current Stock Price ($)", value=100.0, min_value=0.01, key="iv_S")
+        
+        # Stock selection
+        st.markdown("**Stock Selection**")
+        use_stock_symbol_iv = st.checkbox("Use specific stock symbol", value=False, key="iv_use_symbol")
+        
+        if use_stock_symbol_iv:
+            stock_symbol_iv = st.text_input("Stock Symbol (e.g., AAPL, MSFT, SPY)", value="AAPL", key="iv_symbol").upper()
+            st.info(f"Using symbol: {stock_symbol_iv} (manual price entry required)")
+            iv_price_label = f"Current {stock_symbol_iv} Price ($)"
+            market_price_label = f"{stock_symbol_iv} Market Option Price ($)"
+        else:
+            stock_symbol_iv = None
+            iv_price_label = "Current Stock Price ($)"
+            market_price_label = "Market Option Price ($)"
+        
+        st.markdown("**Option Parameters**")
+        market_price = st.number_input(market_price_label, value=5.0, min_value=0.01)
+        S = st.number_input(iv_price_label, value=100.0, min_value=0.01, key="iv_S")
         K = st.number_input("Strike Price ($)", value=100.0, min_value=0.01, key="iv_K")
         T = st.number_input("Time to Expiration (years)", value=0.25, min_value=0.001, key="iv_T")
         r = st.number_input("Risk-free Rate (%)", value=5.0, min_value=0.0, key="iv_r") / 100
@@ -243,14 +273,28 @@ def implied_volatility_calculator():
             st.error("Could not calculate implied volatility. Check input parameters.")
 
 def volatility_surface():
-    st.header("📈 Market Implied Volatility Surface")
+    st.header("Market Implied Volatility Surface")
     st.markdown("*Realistic volatility patterns with smile/skew effects - separate from Black-Scholes*")
     
     col1, col2 = st.columns([1, 2])
     
     with col1:
         st.subheader("Market Parameters")
-        market_spot = st.number_input("Market Spot Price ($)", value=100.0, min_value=0.01, key="market_spot")
+        
+        # Stock selection for volatility surface
+        st.markdown("**Stock Selection**")
+        use_market_symbol = st.checkbox("Use specific stock symbol", value=False, key="market_use_symbol")
+        
+        if use_market_symbol:
+            market_symbol = st.text_input("Stock Symbol (e.g., AAPL, MSFT, SPY)", value="AAPL", key="market_symbol").upper()
+            st.info(f"Modeling volatility surface for: {market_symbol}")
+            market_price_label = f"{market_symbol} Spot Price ($)"
+        else:
+            market_symbol = None
+            market_price_label = "Market Spot Price ($)"
+        
+        st.markdown("**Price Parameters**")
+        market_spot = st.number_input(market_price_label, value=100.0, min_value=0.01, key="market_spot")
         
         # Strike range
         market_strike_min = st.number_input("Min Strike (%)", value=80, min_value=1, key="market_strike_min")
@@ -312,7 +356,7 @@ def volatility_surface():
         ))
         
         market_fig.update_layout(
-            title=f'Market Implied Volatility Surface<br>Spot: ${market_spot:.2f}, Base Vol: {market_base_vol*100:.1f}%',
+            title=f'Market Implied Volatility Surface{f" - {market_symbol}" if market_symbol else ""}<br>Spot: ${market_spot:.2f}, Base Vol: {market_base_vol*100:.1f}%',
             scene=dict(
                 xaxis_title='Strike Price ($)',
                 yaxis_title='Days to Expiration',
@@ -329,7 +373,7 @@ def volatility_surface():
         
         # Educational info about market volatility patterns
         st.info(
-            "📚 **Market Reality**: Unlike Black-Scholes' flat volatility assumption, real markets show:\n"
+            "Market Reality: Unlike Black-Scholes' flat volatility assumption, real markets show:\n"
             "- **Volatility Smile**: Higher IV for OTM options\n"
             "- **Volatility Skew**: Different IV for puts vs calls\n"
             "- **Term Structure**: IV varies with time to expiration\n"
@@ -338,7 +382,7 @@ def volatility_surface():
 
 # Main app
 def main():
-    st.title("🎯 Options & Volatility Dashboard")
+    st.title("Options & Volatility Dashboard")
     st.markdown("Professional options trading and volatility analysis tools")
     
     # Sidebar navigation
