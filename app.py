@@ -94,6 +94,79 @@ def black_scholes_calculator():
         st.metric("Gamma", f"{greeks['gamma']:.4f}")
         st.metric("Theta", f"{greeks['theta']:.4f}")
         st.metric("Vega", f"{greeks['vega']:.4f}")
+    
+    # Black-Scholes Price Surface
+    st.subheader("📈 Black-Scholes Price Surface")
+    
+    surface_col1, surface_col2 = st.columns([1, 2])
+    
+    with surface_col1:
+        st.subheader("Surface Parameters")
+        strike_range = st.slider("Strike Range (% of spot)", 50, 150, (80, 120), key="bs_strike_range")
+        time_range = st.slider("Time Range (days)", 1, 365, (7, 90), key="bs_time_range")
+        show_current_point = st.checkbox("Show Current Option", value=True, key="bs_show_point")
+    
+    with surface_col2:
+        # Generate price surface data
+        strike_min, strike_max = strike_range
+        time_min, time_max = time_range
+        
+        strikes = np.linspace(S * strike_min/100, S * strike_max/100, 25)
+        times = np.linspace(time_min/365, time_max/365, 20)
+        
+        price_surface = np.zeros((len(times), len(strikes)))
+        
+        for i, time in enumerate(times):
+            for j, strike in enumerate(strikes):
+                if option_type == "Call":
+                    price_surface[i, j] = black_scholes_call(S, strike, time, r, sigma)
+                else:
+                    price_surface[i, j] = black_scholes_put(S, strike, time, r, sigma)
+        
+        # Create 3D surface plot
+        fig = go.Figure()
+        
+        # Add surface
+        fig.add_trace(go.Surface(
+            x=strikes,
+            y=times * 365,  # Convert back to days for display
+            z=price_surface,
+            colorscale='Viridis',
+            showscale=True,
+            name=f"{option_type} Price Surface"
+        ))
+        
+        # Add current option point if checkbox is selected
+        if show_current_point:
+            fig.add_trace(go.Scatter3d(
+                x=[K],
+                y=[T * 365],  # Convert to days
+                z=[price],
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color='red',
+                    symbol='diamond'
+                ),
+                name=f"Current {option_type}",
+                showlegend=True
+            ))
+        
+        fig.update_layout(
+            title=f'Black-Scholes {option_type} Option Price Surface<br>Spot: ${S:.2f}, Vol: {sigma*100:.1f}%, Rate: {r*100:.1f}%',
+            scene=dict(
+                xaxis_title='Strike Price ($)',
+                yaxis_title='Days to Expiration',
+                zaxis_title='Option Price ($)',
+                camera=dict(
+                    eye=dict(x=1.5, y=1.5, z=1.5)
+                )
+            ),
+            height=600,
+            margin=dict(l=0, r=0, b=0, t=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
 
 def implied_volatility_calculator():
     st.header("🔍 Implied Volatility Calculator")
