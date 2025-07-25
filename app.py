@@ -105,7 +105,8 @@ def black_scholes_calculator():
         "Select Surface Type",
         ["Price Surface", "Volatility Surface"],
         horizontal=True,
-        help="Price Surface: Shows how option prices vary with strike and time. Volatility Surface: Shows the constant volatility assumption in Black-Scholes."
+        help="Price Surface: Shows how option prices vary with strike and time. Volatility Surface: Shows the constant volatility assumption in Black-Scholes.",
+        key="surface_type_selector"
     )
     
     # Surface parameters
@@ -124,76 +125,90 @@ def black_scholes_calculator():
     strikes = np.linspace(S * strike_min/100, S * strike_max/100, 25)
     times = np.linspace(time_min/365, time_max/365, 20)
     
-    if surface_type == "Price Surface":
-        surface_data = np.zeros((len(times), len(strikes)))
-        for i, time in enumerate(times):
-            for j, strike in enumerate(strikes):
-                if option_type == "Call":
-                    surface_data[i, j] = black_scholes_call(S, strike, time, r, sigma)
-                else:
-                    surface_data[i, j] = black_scholes_put(S, strike, time, r, sigma)
-        z_title = "Option Price ($)"
-        surface_title = f'Black-Scholes {option_type} Option Price Surface'
-        current_z = price
-    else:  # Volatility Surface
-        # In Black-Scholes, volatility is constant across all strikes and times
-        surface_data = np.full((len(times), len(strikes)), sigma * 100)
-        z_title = "Volatility (%)"
-        surface_title = f'Black-Scholes Volatility Surface (Constant σ = {sigma*100:.1f}%)'
-        current_z = sigma * 100
+    # Create container for the plot that will be updated
+    plot_container = st.empty()
     
-    # Create 3D surface plot
-    fig = go.Figure()
-    
-    # Add surface
-    fig.add_trace(go.Surface(
-        x=strikes,
-        y=times * 365,  # Convert back to days for display
-        z=surface_data,
-        colorscale='Viridis' if surface_type == "Price Surface" else 'Blues',
-        showscale=True,
-        name=f"{option_type} {surface_type}"
-    ))
-    
-    # Add current option point if checkbox is selected
-    if show_current_point:
-        fig.add_trace(go.Scatter3d(
-            x=[K],
-            y=[T * 365],  # Convert to days
-            z=[current_z],
-            mode='markers',
-            marker=dict(
-                size=10,
-                color='red',
-                symbol='diamond'
-            ),
-            name=f"Current {option_type}",
-            showlegend=True
+    with plot_container.container():
+        if surface_type == "Price Surface":
+            surface_data = np.zeros((len(times), len(strikes)))
+            for i, time in enumerate(times):
+                for j, strike in enumerate(strikes):
+                    if option_type == "Call":
+                        surface_data[i, j] = black_scholes_call(S, strike, time, r, sigma)
+                    else:
+                        surface_data[i, j] = black_scholes_put(S, strike, time, r, sigma)
+            z_title = "Option Price ($)"
+            surface_title = f'Black-Scholes {option_type} Option Price Surface'
+            current_z = price
+            colorscale = 'Viridis'
+        else:  # Volatility Surface
+            # In Black-Scholes, volatility is constant across all strikes and times
+            surface_data = np.full((len(times), len(strikes)), sigma * 100)
+            z_title = "Volatility (%)"
+            surface_title = f'Black-Scholes Volatility Surface (Constant σ = {sigma*100:.1f}%)'
+            current_z = sigma * 100
+            colorscale = 'Blues'
+        
+        # Create 3D surface plot
+        fig = go.Figure()
+        
+        # Add surface
+        fig.add_trace(go.Surface(
+            x=strikes,
+            y=times * 365,  # Convert back to days for display
+            z=surface_data,
+            colorscale=colorscale,
+            showscale=True,
+            name=f"{option_type} {surface_type}",
+            hovertemplate=f'<b>Strike:</b> $%{{x:.2f}}<br><b>Days:</b> %{{y:.0f}}<br><b>{z_title}:</b> %{{z:.4f}}<extra></extra>'
         ))
-    
-    fig.update_layout(
-        title=f'{surface_title}<br>Spot: ${S:.2f}, Vol: {sigma*100:.1f}%, Rate: {r*100:.1f}%',
-        scene=dict(
-            xaxis_title='Strike Price ($)',
-            yaxis_title='Days to Expiration',
-            zaxis_title=z_title,
-            camera=dict(
-                eye=dict(x=1.5, y=1.5, z=1.5)
+        
+        # Add current option point if checkbox is selected
+        if show_current_point:
+            fig.add_trace(go.Scatter3d(
+                x=[K],
+                y=[T * 365],  # Convert to days
+                z=[current_z],
+                mode='markers',
+                marker=dict(
+                    size=12,
+                    color='red',
+                    symbol='diamond',
+                    line=dict(color='darkred', width=2)
+                ),
+                name=f"Current {option_type}",
+                showlegend=True,
+                hovertemplate=f'<b>Current {option_type}</b><br>Strike: ${K:.2f}<br>Days: {T*365:.0f}<br>{z_title}: {current_z:.4f}<extra></extra>'
+            ))
+        
+        fig.update_layout(
+            title=f'{surface_title}<br>Spot: ${S:.2f}, Vol: {sigma*100:.1f}%, Rate: {r*100:.1f}%',
+            scene=dict(
+                xaxis_title='Strike Price ($)',
+                yaxis_title='Days to Expiration',
+                zaxis_title=z_title,
+                camera=dict(
+                    eye=dict(x=1.5, y=1.5, z=1.5)
+                )
+            ),
+            height=600,
+            margin=dict(l=0, r=0, b=0, t=80),
+            # Add animation configuration for smoother transitions
+            transition=dict(
+                duration=300,
+                easing="cubic-in-out"
             )
-        ),
-        height=600,
-        margin=dict(l=0, r=0, b=0, t=80)
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Educational note about volatility surface
-    if surface_type == "Volatility Surface":
-        st.info(
-            "📚 **Educational Note**: In the Black-Scholes model, volatility is assumed to be constant across all strikes and expiration dates. "
-            "This is why the volatility surface is completely flat. In reality, market-observed implied volatilities show patterns like volatility smile/skew. "
-            "Check the 'Volatility Surface' tab to see realistic implied volatility patterns."
         )
+        
+        st.plotly_chart(fig, use_container_width=True, key=f"surface_plot_{surface_type}")
+        
+        # Educational note about volatility surface
+        if surface_type == "Volatility Surface":
+            st.info(
+                "📚 **Educational Note**: In the Black-Scholes model, volatility is assumed to be constant across all strikes and expiration dates. "
+                "This is why the volatility surface is completely flat. In reality, market-observed implied volatilities show patterns like volatility smile/skew. "
+                "Check the 'Volatility Surface' tab to see realistic implied volatility patterns."
+            )
 
 def implied_volatility_calculator():
     st.header("🔍 Implied Volatility Calculator")
