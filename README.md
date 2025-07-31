@@ -86,6 +86,10 @@ This tool bridges the gap between theoretical options pricing models and real ma
 - **yfinance**: Real-time financial market data
 - **Yahoo Finance API**: Live stock prices and historical data
 
+## Licence
+
+Creative Commons Zero v1.0 Universal (CC0) - Public domain dedication for maximum freedom
+
 ## Contributing
 
 This project is open for educational use and contributions. Feel free to submit issues or pull requests to enhance functionality.
